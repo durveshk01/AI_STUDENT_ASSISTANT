@@ -16,3 +16,6 @@ class Subject(Base):
 
     user = relationship("User", backref="subjects")
     documents = relationship("Document", back_populates="subject", cascade="all, delete-orphan")
+    # Cascade deletes to related entities when a subject is deleted
+    quizzes = relationship("Quiz", cascade="all, delete-orphan", passive_deletes=True)
+    flashcard_decks = relationship("FlashcardDeck", cascade="all, delete-orphan", passive_deletes=True)

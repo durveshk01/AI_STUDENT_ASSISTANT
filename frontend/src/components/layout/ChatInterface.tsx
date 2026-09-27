@@ -67,24 +67,31 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
 
       if (!response.ok) throw new Error("Failed to send message");
       
-      const reader = response.body?.getReader();
+      if (!response.body) throw new Error("No response body from server");
+      const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       
       let aiContent = "";
       setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
       let newConvId = conversationId;
+      let buffer = "";
 
-      while (reader) {
+      while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n\n");
-        for (const line of lines) {
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || ""; // Keep the incomplete part in the buffer
+
+        for (const line of parts) {
           if (line.startsWith("data: ")) {
             const dataStr = line.slice(6);
-            if (dataStr === "[DONE]") break;
+            if (dataStr.trim() === "[DONE]") {
+              // We're done
+              break;
+            }
             
             try {
               const data = JSON.parse(dataStr);
@@ -106,7 +113,9 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
               if (data.conversation_id && !conversationId) {
                 newConvId = data.conversation_id;
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error("Failed to parse JSON chunk:", dataStr);
+            }
           }
         }
       }
@@ -155,7 +164,7 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
                   <div className="mt-4 pt-3 border-t border-gray-200">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2">Sources</p>
                     <div className="space-y-1">
-                      {msg.sources.map((s: any, idx: int) => (
+                      {msg.sources.map((s: any, idx: number) => (
                         <div key={idx} className="flex items-center gap-1 text-xs text-gray-600 bg-white/50 p-1.5 rounded">
                           <FileText className="w-3 h-3 text-blue-500" />
                           <span className="truncate max-w-[200px]">{s.document_name}</span>

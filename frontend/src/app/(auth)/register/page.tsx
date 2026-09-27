@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { fetchApi } from "@/lib/api";
+import { Zap } from "lucide-react";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -24,9 +25,39 @@ export default function RegisterPage() {
         method: "POST",
         body: JSON.stringify({ name, email, password }),
       });
-
-      // After successful registration, route to login
       router.push("/login");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickTest = async () => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    setError("");
+    setLoading(true);
+
+    // Register test account
+    try {
+      await fetch(`${API_URL}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Test User", email: "test@test.com", password: "test1234" }),
+      });
+    } catch (_) {}
+
+    // Login immediately
+    try {
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ username: "test@test.com", password: "test1234" }),
+      });
+      if (!response.ok) throw new Error("Login failed");
+      const data = await response.json();
+      localStorage.setItem("token", data.access_token);
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -74,6 +105,22 @@ export default function RegisterPage() {
             {loading ? "Registering..." : "Register"}
           </Button>
         </form>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+          <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-gray-400">or</span></div>
+        </div>
+
+        <Button
+          variant="outline"
+          className="w-full border-blue-200 text-blue-600 hover:bg-blue-50"
+          disabled={loading}
+          onClick={handleQuickTest}
+        >
+          <Zap className="w-4 h-4 mr-2" />
+          {loading ? "Setting up..." : "Quick Test Login"}
+        </Button>
+
         <div className="text-sm text-center">
           Already have an account? <Link href="/login" className="text-blue-600 hover:underline">Login</Link>
         </div>

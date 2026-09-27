@@ -1,6 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.auth import router as auth_router
+from app.database.base import Base
+from app.database.session import engine
+from app.core.config import settings
+from sqlalchemy import text
+
+# Create vector extension and all tables
+with engine.connect() as conn:
+    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    conn.commit()
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AI-Powered Study Assistant API",
@@ -10,12 +20,15 @@ app = FastAPI(
 
 # CORS configuration
 origins = [
-    "http://localhost:3000",
+    origin.strip().rstrip("/")
+    for origin in settings.CORS_ORIGINS.split(",")
+    if origin.strip()
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"https://[a-zA-Z0-9-]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

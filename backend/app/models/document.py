@@ -15,7 +15,7 @@ class Document(Base):
     status = Column(String, default="uploading") # uploading, processing, completed, failed
     page_count = Column(Integer, nullable=True)
     
-    subject_id = Column(String, ForeignKey("subjects.id"), nullable=False)
+    subject_id = Column(String, ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -23,3 +23,4 @@ class Document(Base):
 
     subject = relationship("Subject", back_populates="documents")
     user = relationship("User", backref="documents")
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")

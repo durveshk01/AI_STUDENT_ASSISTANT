@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Zap } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -12,27 +13,20 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doLogin = async (loginEmail: string, loginPassword: string) => {
     setError("");
     setLoading(true);
-
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          username: email,
-          password: password,
-        }),
+        body: new URLSearchParams({ username: loginEmail, password: loginPassword }),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.detail || "Login failed");
       }
-
       const data = await response.json();
       localStorage.setItem("token", data.access_token);
       router.push("/dashboard");
@@ -41,6 +35,29 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await doLogin(email, password);
+  };
+
+  const handleQuickTest = async () => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    setError("");
+    setLoading(true);
+
+    // Try to register first (will fail silently if already exists)
+    try {
+      await fetch(`${API_URL}/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Test User", email: "test@test.com", password: "test1234" }),
+      });
+    } catch (_) {}
+
+    // Now login
+    await doLogin("test@test.com", "test1234");
   };
 
   return (
@@ -73,6 +90,22 @@ export default function LoginPage() {
             {loading ? "Logging in..." : "Login"}
           </Button>
         </form>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+          <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-gray-400">or</span></div>
+        </div>
+
+        <Button
+          variant="outline"
+          className="w-full border-blue-200 text-blue-600 hover:bg-blue-50"
+          disabled={loading}
+          onClick={handleQuickTest}
+        >
+          <Zap className="w-4 h-4 mr-2" />
+          {loading ? "Signing in..." : "Quick Test Login"}
+        </Button>
+
         <div className="text-sm text-center">
           Don't have an account? <Link href="/register" className="text-blue-600 hover:underline">Register</Link>
         </div>

@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
+import os
 
 from app.database.session import get_db
 from app.models.subject import Subject
+from app.models.document import Document
 from app.models.user import User
 from app.schemas.subject import SubjectCreate, SubjectResponse, SubjectUpdate
 from app.api.deps import get_current_user
@@ -35,6 +37,16 @@ def delete_subject(subject_id: str, db: Session = Depends(get_db), current_user:
     subject = db.query(Subject).filter(Subject.id == subject_id, Subject.user_id == current_user.id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
+    
+    # Delete physical files before cascading DB delete
+    docs = db.query(Document).filter(Document.subject_id == subject_id).all()
+    for doc in docs:
+        try:
+            if doc.file_path and os.path.exists(doc.file_path):
+                os.remove(doc.file_path)
+        except OSError as e:
+            print(f"Warning: could not delete file {doc.file_path}: {e}")
+    
     db.delete(subject)
     db.commit()
     return {"message": "Subject deleted successfully"}

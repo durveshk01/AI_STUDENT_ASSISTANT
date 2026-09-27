@@ -5,7 +5,7 @@ from typing import List, Optional
 class QuizGenerateRequest(BaseModel):
     subject_id: str
     document_id: Optional[str] = None
-    num_questions: int = 10
+    num_questions: int = Field(default=10, ge=1, le=20)
     difficulty: str = "Medium"
 
 # AI Schema

@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { FileText, Trash2, ExternalLink } from "lucide-react";
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const loadDocuments = async () => {
     try {
@@ -25,6 +26,18 @@ export default function DocumentsPage() {
     loadDocuments();
   }, []);
 
+  useEffect(() => {
+    if (!documents.some((doc) => doc.status === "uploading" || doc.status === "processing")) return;
+    const interval = setInterval(async () => {
+      try {
+        setDocuments(await fetchApi("/api/documents"));
+      } catch (err) {
+        console.error(err);
+      }
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [documents]);
+
   const handleDelete = async (docId: string) => {
     if (!confirm("Delete this document?")) return;
     try {
@@ -35,15 +48,25 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleRetry = async (docId: string) => {
+    setRetryingId(docId);
+    try {
+      await fetchApi(`/api/documents/${docId}/retry`, { method: "POST" });
+      await loadDocuments();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not retry document processing.");
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
   if (loading) return <div>Loading documents...</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">All Documents</h1>
-        <Button asChild variant="outline">
-          <Link href="/subjects">Upload via Subjects</Link>
-        </Button>
+        <Link href="/subjects" className={buttonVariants({ variant: "outline" })}>Upload via Subjects</Link>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -70,9 +93,9 @@ export default function DocumentsPage() {
                     <div className="flex items-center">
                       <FileText className="w-5 h-5 text-gray-400 mr-3" />
                       <div>
-                        <Link href={`/documents/${doc.id}`} className="font-medium text-gray-900 hover:text-blue-600">
+                        <span className="font-medium text-gray-900">
                           {doc.filename}
-                        </Link>
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -88,11 +111,14 @@ export default function DocumentsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/chat?doc=${doc.id}`} title="Ask AI">
-                          <ExternalLink className="w-4 h-4 text-blue-600" />
-                        </Link>
-                      </Button>
+                      {(doc.status === "failed" || doc.status === "completed") && (
+                        <Button variant="outline" size="sm" onClick={() => handleRetry(doc.id)} disabled={retryingId === doc.id}>
+                          {retryingId === doc.id ? "Processing..." : doc.status === "failed" ? "Retry" : "Reindex"}
+                        </Button>
+                      )}
+                      <Link href={`/chat/new?subject=${doc.subject_id}&doc=${doc.id}`} title="Ask AI" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                        <ExternalLink className="w-4 h-4 text-blue-600" />
+                      </Link>
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(doc.id)} className="text-gray-400 hover:text-red-500">
                         <Trash2 className="w-4 h-4" />
                       </Button>

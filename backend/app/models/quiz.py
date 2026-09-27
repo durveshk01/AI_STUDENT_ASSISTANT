@@ -18,7 +18,7 @@ class Quiz(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    subject = relationship("Subject")
+    subject = relationship("Subject", back_populates="quizzes")
     document = relationship("Document")
     user = relationship("User")
     questions = relationship("QuizQuestion", back_populates="quiz", cascade="all, delete-orphan")

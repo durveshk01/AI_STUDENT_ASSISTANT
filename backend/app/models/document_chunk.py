@@ -16,7 +16,7 @@ class DocumentChunk(Base):
     chunk_index = Column(Integer, nullable=False)
     text = Column(String, nullable=False)
     
-    # 768 for Gemini/OpenAI standard embeddings (can adjust if needed)
-    embedding = Column(Vector(768))
+    # Must match GeminiProvider.embedding_dimensions and the persisted pgvector column.
+    embedding = Column(Vector(3072))
 
-    document = relationship("Document", backref="chunks")
+    document = relationship("Document", back_populates="chunks")

@@ -1,6 +1,13 @@
 # Environment variables
 .env
 .env.local
+.env.*
+!.env.example
+
+# Local diagnostic output
+*.log
+/logs.txt
+/backend_logs.txt
 
 # Python
 __pycache__/

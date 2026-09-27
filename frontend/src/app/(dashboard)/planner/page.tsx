@@ -12,7 +12,7 @@ export default function PlannerPage() {
   
   const [formData, setFormData] = useState({
     exam_date: "",
-    subjects: [] as str[],
+    subjects: [] as string[],
     available_hours_per_day: 2,
     current_confidence: "Medium",
     target_score: "90%"

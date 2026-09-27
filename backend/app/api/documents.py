@@ -4,6 +4,7 @@ from typing import List
 import os
 import uuid
 import shutil
+import httpx
 
 from app.database.session import get_db
 from app.models.document import Document
@@ -12,6 +13,12 @@ from app.models.user import User
 from app.schemas.document import DocumentResponse
 from app.api.deps import get_current_user
 from app.services.document_service import process_document_background
+from app.services.file_storage import (
+    delete_file,
+    file_exists,
+    remote_storage_enabled,
+    upload_fileobj,
+)
 
 router = APIRouter()
 
@@ -25,6 +32,7 @@ def get_documents(subject_id: str | None = None, db: Session = Depends(get_db), 
         query = query.filter(Document.subject_id == subject_id)
     return query.all()
 
+# Changed from async def to def to run in threadpool and avoid blocking event loop
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
     background_tasks: BackgroundTasks,
@@ -33,19 +41,44 @@ async def upload_document(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    import asyncio
+
+    extension = os.path.splitext(file.filename or "")[1].lower()
+    if extension not in {".pdf", ".txt", ".docx"}:
+        raise HTTPException(status_code=415, detail="Supported file types are PDF, TXT, and DOCX.")
+    
     # Verify subject belongs to user
     subject = db.query(Subject).filter(Subject.id == subject_id, Subject.user_id == current_user.id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    unique_filename = f"{uuid.uuid4()}{extension}"
+    file.file.seek(0, os.SEEK_END)
+    file_size = file.file.tell()
+    file.file.seek(0)
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    file_size = os.path.getsize(file_path)
+    if remote_storage_enabled():
+        file_path = f"{current_user.id}/{unique_filename}"
+        try:
+            await asyncio.to_thread(
+                upload_fileobj,
+                file.file,
+                file_path,
+                file.content_type or "application/octet-stream",
+            )
+        except (httpx.HTTPError, RuntimeError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Could not save the uploaded file to cloud storage.",
+            ) from exc
+    else:
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+
+        def write_file():
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+        await asyncio.to_thread(write_file)
 
     db_document = Document(
         filename=file.filename,
@@ -60,7 +93,8 @@ async def upload_document(
     db.commit()
     db.refresh(db_document)
 
-    background_tasks.add_task(process_document_background, db, db_document.id)
+    print(f"Adding background task for {db_document.id}", flush=True)
+    background_tasks.add_task(process_document_background, db_document.id)
     
     return db_document
 
@@ -71,15 +105,57 @@ def get_document(document_id: str, db: Session = Depends(get_db), current_user: 
         raise HTTPException(status_code=404, detail="Document not found")
     return document
 
+@router.post("/{document_id}/retry", response_model=DocumentResponse)
+def retry_document_processing(
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.user_id == current_user.id,
+    ).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if document.status == "processing":
+        raise HTTPException(
+            status_code=409,
+            detail="This document is already being processed.",
+        )
+    try:
+        file_available = file_exists(document.file_path)
+    except (httpx.HTTPError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not check whether the uploaded file is available.",
+        ) from exc
+    if not file_available:
+        raise HTTPException(
+            status_code=409,
+            detail="The uploaded file is no longer available. Please upload it again.",
+        )
+
+    document.status = "uploading"
+    db.commit()
+    db.refresh(document)
+    background_tasks.add_task(process_document_background, document.id)
+    return document
+
 @router.delete("/{document_id}")
 def delete_document(document_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     document = db.query(Document).filter(Document.id == document_id, Document.user_id == current_user.id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
         
-    # Delete physical file
-    if os.path.exists(document.file_path):
-        os.remove(document.file_path)
+    # Remove the local or cloud object before deleting its database record.
+    try:
+        delete_file(document.file_path)
+    except (httpx.HTTPError, OSError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not delete the uploaded file from storage.",
+        ) from exc
         
     db.delete(document)
     db.commit()
@@ -95,6 +171,9 @@ def summarize_document(document_id: str, db: Session = Depends(get_db), current_
         raise HTTPException(status_code=404, detail="Document not found")
         
     chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).limit(20).all()
+    if not chunks:
+        raise HTTPException(status_code=400, detail="No processed content found for this document.")
+    
     context_str = "\n".join([c.text for c in chunks])
     
     ai_provider = get_ai_provider()

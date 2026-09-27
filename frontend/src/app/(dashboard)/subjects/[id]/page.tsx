@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { FileText, ArrowLeft, Upload, Trash2 } from "lucide-react";
 import Link from "next/link";
 
@@ -16,6 +16,7 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -35,6 +36,19 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     loadData();
   }, [subjectId]);
+
+  useEffect(() => {
+    if (!documents.some((doc) => doc.status === "uploading" || doc.status === "processing")) return;
+    const interval = setInterval(async () => {
+      try {
+        const docsData = await fetchApi(`/api/documents?subject_id=${subjectId}`);
+        setDocuments(docsData);
+      } catch (err) {
+        console.error(err);
+      }
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [documents, subjectId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -79,6 +93,18 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const handleRetry = async (docId: string) => {
+    setRetryingId(docId);
+    try {
+      await fetchApi(`/api/documents/${docId}/retry`, { method: "POST" });
+      await loadData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not retry document processing.");
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
   if (loading) return <div>Loading subject...</div>;
   if (!subject) return <div>Subject not found</div>;
 
@@ -107,12 +133,10 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
               disabled={uploading}
             />
             <label htmlFor="file-upload">
-              <Button asChild disabled={uploading} className="cursor-pointer">
-                <span>
+              <span className={`cursor-pointer ${buttonVariants()}`}>
                   <Upload className="w-4 h-4 mr-2" />
                   {uploading ? "Uploading..." : "Upload Document"}
-                </span>
-              </Button>
+              </span>
             </label>
           </div>
         </div>
@@ -132,9 +156,9 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <Link href={`/documents/${doc.id}`} className="font-medium text-gray-900 hover:text-blue-600">
+                    <span className="font-medium text-gray-900">
                       {doc.filename}
-                    </Link>
+                    </span>
                     <div className="text-xs text-gray-500 flex gap-2">
                       <span>{(doc.file_size / 1024 / 1024).toFixed(2)} MB</span>
                       <span>•</span>
@@ -146,9 +170,12 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
                 </div>
                 
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/chat?doc=${doc.id}`}>Ask AI</Link>
-                  </Button>
+                  {(doc.status === "failed" || doc.status === "completed") && (
+                    <Button variant="outline" size="sm" onClick={() => handleRetry(doc.id)} disabled={retryingId === doc.id}>
+                      {retryingId === doc.id ? "Processing..." : doc.status === "failed" ? "Retry processing" : "Reindex"}
+                    </Button>
+                  )}
+                  <Link href={`/chat/new?subject=${subjectId}&doc=${doc.id}`} className={buttonVariants({ variant: "outline", size: "sm" })}>Ask AI</Link>
                   <Button variant="ghost" size="sm" onClick={() => handleDelete(doc.id)} className="text-gray-400 hover:text-red-500">
                     <Trash2 className="w-4 h-4" />
                   </Button>

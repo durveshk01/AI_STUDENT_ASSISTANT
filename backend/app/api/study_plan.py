@@ -17,6 +17,18 @@ class StudyPlanRequest(BaseModel):
     current_confidence: str
     target_score: str
 
+class StudyTask(BaseModel):
+    subject: str
+    topic: str
+    hours: float
+
+class StudyDay(BaseModel):
+    day: str
+    tasks: List[StudyTask]
+
+class StudySchedule(BaseModel):
+    schedule: List[StudyDay]
+
 class StudyPlanResponse(BaseModel):
     plan: dict
 
@@ -32,32 +44,11 @@ def generate_study_plan(request: StudyPlanRequest, db: Session = Depends(get_db)
     - Current Confidence: {request.current_confidence}
     - Target Score: {request.target_score}
     
-    Return a structured JSON object with a daily schedule breaking down the subjects and topics to study each day, including estimated time in hours for each topic.
-    Format it as:
-    {{
-        "schedule": [
-            {{"day": "Monday", "tasks": [{{"subject": "Math", "topic": "Algebra", "hours": 1.5}}]}}
-        ]
-    }}
+    Create a daily schedule breaking down the subjects and topics to study each day, including estimated time in hours for each topic.
     """
     
-    # We could define a Pydantic schema for the AI to return, but returning a dict for flexibility
     try:
-        # Instead of strict structured, we'll use generate_answer and parse JSON, or use structured if defined
-        # For simplicity, we just use generate_answer and assume it returns JSON string
-        result = ai_provider.generate_answer(prompt, "You are an expert study planner.")
-        # Try to parse the result as JSON if it's not already
-        import json
-        import re
-        
-        # Clean up markdown code blocks if any
-        json_str = result
-        if "```json" in result:
-            json_str = result.split("```json")[1].split("```")[0]
-        elif "```" in result:
-            json_str = result.split("```")[1].split("```")[0]
-            
-        plan_dict = json.loads(json_str.strip())
-        return {"plan": plan_dict}
+        generated = ai_provider.generate_structured(prompt, "You are an expert study planner.", StudySchedule)
+        return {"plan": generated.model_dump()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate study plan: {e}")

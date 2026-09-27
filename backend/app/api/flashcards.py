@@ -15,8 +15,10 @@ router = APIRouter()
 
 @router.post("/generate", response_model=FlashcardDeckResponse)
 def generate_flashcards(request: FlashcardGenerateRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = "Extract key concepts, definitions, and important points to create flashcards."
-    chunks = semantic_search(db, current_user.id, query, request.subject_id, request.document_id, top_k=10)
+    from app.models.subject import Subject
+    subject = db.query(Subject).filter(Subject.id == request.subject_id).first()
+    search_query = subject.name if subject else "key concepts and definitions"
+    chunks = semantic_search(db, current_user.id, search_query, request.subject_id, request.document_id, top_k=10)
     
     if not chunks:
         raise HTTPException(status_code=400, detail="Not enough document context found.")

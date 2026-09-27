@@ -11,7 +11,13 @@ class AIProvider(ABC):
         pass
     
     @abstractmethod
+    def generate_answer_stream_sync(self, prompt: str, context: str):
+        """Synchronous generator for streaming — safe in threadpool endpoints."""
+        pass
+
+    @abstractmethod
     async def generate_answer_stream(self, prompt: str, context: str):
+        """Async generator for streaming — use in async endpoints only."""
         pass
 
     @abstractmethod

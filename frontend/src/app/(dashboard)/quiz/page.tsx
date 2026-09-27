@@ -11,6 +11,7 @@ export default function QuizPage() {
   const [quiz, setQuiz] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<any>(null);
+  const [generationError, setGenerationError] = useState("");
 
   const [formData, setFormData] = useState({
     subject_id: "",
@@ -38,6 +39,7 @@ export default function QuizPage() {
     if (!formData.subject_id) return alert("Select a subject");
     
     setLoading(true);
+    setGenerationError("");
     try {
       const generated = await fetchApi("/api/quizzes/generate", {
         method: "POST",
@@ -48,7 +50,7 @@ export default function QuizPage() {
       setResult(null);
     } catch (err) {
       console.error(err);
-      alert("Failed to generate quiz. Make sure the subject has documents processed.");
+      setGenerationError(err instanceof Error ? err.message : "Failed to generate quiz.");
     } finally {
       setLoading(false);
     }
@@ -88,6 +90,11 @@ export default function QuizPage() {
       {!quiz ? (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-xl">
           <h2 className="text-xl font-bold mb-4">Generate New Quiz</h2>
+          {generationError && (
+            <div role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {generationError}
+            </div>
+          )}
           <form onSubmit={handleGenerate} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>

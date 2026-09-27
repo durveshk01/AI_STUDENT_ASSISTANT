@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
 import { MessageSquare, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 export default function ChatIndexPage() {
   const [conversations, setConversations] = useState<any[]>([]);
@@ -30,11 +30,9 @@ export default function ChatIndexPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Conversations</h1>
-        <Button asChild>
-          <Link href="/chat/new">
-            <Plus className="w-4 h-4 mr-2" /> New Chat
-          </Link>
-        </Button>
+        <Link href="/chat/new" className={buttonVariants()}>
+          <Plus className="w-4 h-4 mr-2" /> New Chat
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

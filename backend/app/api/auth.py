@@ -5,16 +5,26 @@ from typing import Any
 
 from app.database.session import get_db
 from app.models.user import User
+from app.models.subject import Subject
 from app.schemas.user import UserCreate, UserResponse, Token
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.api.deps import get_current_user
 
 router = APIRouter()
 
+# Demo subjects to seed for every new user
+DEMO_SUBJECTS = [
+    {"name": "Data Structures & Algorithms", "description": "Arrays, Linked Lists, Trees, Graphs, Sorting, Searching, Dynamic Programming, and Complexity Analysis."},
+    {"name": "Operating Systems", "description": "Process management, CPU scheduling, memory management, file systems, deadlocks, and virtualization."},
+    {"name": "Database Management Systems", "description": "SQL, normalization, ER diagrams, transactions, indexing, and query optimization."},
+    {"name": "Computer Networks", "description": "OSI model, TCP/IP, HTTP, DNS, routing, switching, and network security."},
+    {"name": "Object-Oriented Programming", "description": "Classes, inheritance, polymorphism, encapsulation, abstraction, and design patterns."},
+]
+
 @router.post("/register", response_model=UserResponse)
 def register(user_in: UserCreate, db: Session = Depends(get_db)) -> Any:
     """
-    Register a new user.
+    Register a new user and seed demo subjects.
     """
     user = db.query(User).filter(User.email == user_in.email).first()
     if user:
@@ -30,6 +40,16 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> Any:
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Seed demo subjects for the new user
+    for subj in DEMO_SUBJECTS:
+        db.add(Subject(
+            name=subj["name"],
+            description=subj["description"],
+            user_id=user.id,
+        ))
+    db.commit()
+
     return user
 
 @router.post("/login", response_model=Token)
