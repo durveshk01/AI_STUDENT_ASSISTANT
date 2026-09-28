@@ -4,6 +4,7 @@ pydantic
 pydantic-settings
 sqlalchemy
 psycopg2-binary
+psycopg[binary]
 pgvector
 alembic
 python-jose[cryptography]
