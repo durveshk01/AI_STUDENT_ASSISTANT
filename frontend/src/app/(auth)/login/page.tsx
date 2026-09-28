@@ -4,36 +4,36 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { fetchApi } from "@/lib/api";
 import { Zap } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState<"login" | "test" | null>(null);
+  const loading = loadingAction !== null;
   const router = useRouter();
+
+  const authenticate = async (loginEmail: string, loginPassword: string) => {
+    const data = await fetchApi<{ access_token: string }>("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ username: loginEmail, password: loginPassword }),
+    });
+    window.localStorage.setItem("token", data.access_token);
+    router.push("/dashboard");
+  };
 
   const doLogin = async (loginEmail: string, loginPassword: string) => {
     setError("");
-    setLoading(true);
+    setLoadingAction("login");
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ username: loginEmail, password: loginPassword }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Login failed");
-      }
-      const data = await response.json();
-      localStorage.setItem("token", data.access_token);
-      router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.message);
+      await authenticate(loginEmail, loginPassword);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to log in. Please try again.");
     } finally {
-      setLoading(false);
+      setLoadingAction(null);
     }
   };
 
@@ -43,28 +43,32 @@ export default function LoginPage() {
   };
 
   const handleQuickTest = async () => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     setError("");
-    setLoading(true);
+    setLoadingAction("test");
 
-    // Try to register first (will fail silently if already exists)
     try {
-      await fetch(`${API_URL}/api/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Test User", email: "test@test.com", password: "test1234" }),
-      });
-    } catch (_) {}
-
-    // Now login
-    await doLogin("test@test.com", "test1234");
+      try {
+        await fetchApi("/api/auth/register", {
+          method: "POST",
+          body: JSON.stringify({ name: "Test User", email: "test@test.com", password: "test1234" }),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (!message.includes("already exists")) throw err;
+      }
+      await authenticate("test@test.com", "test1234");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to sign in to the test account. Please try again.");
+    } finally {
+      setLoadingAction(null);
+    }
   };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-md">
         <h1 className="text-2xl font-bold text-center">Login to Study Assistant</h1>
-        {error && <div className="p-3 text-sm text-red-500 bg-red-50 rounded">{error}</div>}
+        {error && <div role="alert" aria-live="polite" className="p-3 text-sm text-red-700 bg-red-50 rounded">{error}</div>}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Email</label>
@@ -87,7 +91,7 @@ export default function LoginPage() {
             />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Logging in..." : "Login"}
+            {loadingAction === "login" ? "Logging in..." : "Login"}
           </Button>
         </form>
 
@@ -103,11 +107,11 @@ export default function LoginPage() {
           onClick={handleQuickTest}
         >
           <Zap className="w-4 h-4 mr-2" />
-          {loading ? "Signing in..." : "Quick Test Login"}
+          {loadingAction === "test" ? "Signing in..." : "Quick Test Login"}
         </Button>
 
         <div className="text-sm text-center">
-          Don't have an account? <Link href="/register" className="text-blue-600 hover:underline">Register</Link>
+          Don&apos;t have an account? <Link href="/register" className="text-blue-600 hover:underline">Register</Link>
         </div>
       </div>
     </div>

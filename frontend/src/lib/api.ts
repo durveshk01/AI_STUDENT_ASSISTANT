@@ -1,4 +1,5 @@
 const DEFAULT_API_URL = "http://localhost:8000";
+const API_REQUEST_TIMEOUT_MS = 90_000;
 
 function getApiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
@@ -41,19 +42,63 @@ export async function fetchApi<T = any>(path: string, options: RequestInit = {})
     }
   }
 
-  const response = await fetch(getApiUrl(path), { ...options, headers });
-  const contentType = response.headers.get("content-type") || "";
-  let payload: unknown = null;
+  const controller = new AbortController();
+  const externalSignal = options.signal;
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, API_REQUEST_TIMEOUT_MS);
+  const abortWithExternalSignal = () => controller.abort();
 
-  if (response.status !== 204) {
-    payload = contentType.includes("application/json")
-      ? await response.json()
-      : await response.text();
+  if (externalSignal?.aborted) {
+    abortWithExternalSignal();
+  } else {
+    externalSignal?.addEventListener("abort", abortWithExternalSignal, { once: true });
   }
 
-  if (!response.ok) {
-    throw new Error(getErrorMessage(payload, response.status));
-  }
+  try {
+    const response = await fetch(getApiUrl(path), {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    const contentType = response.headers.get("content-type") || "";
+    let payload: unknown = null;
 
-  return payload as T;
+    if (response.status !== 204) {
+      if (contentType.includes("application/json")) {
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+      } else {
+        payload = await response.text();
+      }
+    }
+
+    if (!response.ok) {
+      if (response.status >= 500) {
+        throw new Error(
+          `The Study Assistant API is temporarily unavailable (HTTP ${response.status}). Please try again shortly.`,
+        );
+      }
+      throw new Error(getErrorMessage(payload, response.status));
+    }
+
+    return payload as T;
+  } catch (error) {
+    if (timedOut) {
+      throw new Error("The Study Assistant API did not respond in time. It may be waking up or temporarily unavailable. Please try again.");
+    }
+    if (externalSignal?.aborted) throw error;
+    if (error instanceof TypeError) {
+      throw new Error("Could not reach the Study Assistant API. Check your connection and try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", abortWithExternalSignal);
+  }
 }
