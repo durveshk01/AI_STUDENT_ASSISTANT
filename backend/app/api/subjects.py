@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-import os
+import httpx
 
 from app.database.session import get_db
 from app.models.subject import Subject
 from app.models.document import Document
 from app.models.user import User
+from app.models.quiz import Quiz
+from app.models.flashcard import FlashcardDeck
+from app.models.chat import Conversation
 from app.schemas.subject import SubjectCreate, SubjectResponse, SubjectUpdate
 from app.api.deps import get_current_user
+from app.services.file_storage import delete_file
 
 router = APIRouter()
 
@@ -38,15 +42,35 @@ def delete_subject(subject_id: str, db: Session = Depends(get_db), current_user:
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     
-    # Delete physical files before cascading DB delete
+    # Remove stored files and release document references before deleting rows.
     docs = db.query(Document).filter(Document.subject_id == subject_id).all()
     for doc in docs:
         try:
-            if doc.file_path and os.path.exists(doc.file_path):
-                os.remove(doc.file_path)
-        except OSError as e:
-            print(f"Warning: could not delete file {doc.file_path}: {e}")
-    
+            delete_file(doc.file_path)
+        except (httpx.HTTPError, OSError, RuntimeError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Could not delete an uploaded file from storage.",
+            ) from exc
+        db.query(Quiz).filter(Quiz.document_id == doc.id).update(
+            {Quiz.document_id: None},
+            synchronize_session=False,
+        )
+        db.delete(doc)
+
+    # Explicitly remove subject-owned study material because the existing
+    # database foreign keys do not all declare ON DELETE CASCADE.
+    db.query(Quiz).filter(Quiz.subject_id == subject_id).delete(
+        synchronize_session=False,
+    )
+    db.query(FlashcardDeck).filter(FlashcardDeck.subject_id == subject_id).delete(
+        synchronize_session=False,
+    )
+    db.query(Conversation).filter(Conversation.subject_id == subject_id).update(
+        {Conversation.subject_id: None},
+        synchronize_session=False,
+    )
+
     db.delete(subject)
     db.commit()
     return {"message": "Subject deleted successfully"}

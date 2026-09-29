@@ -10,6 +10,7 @@ from app.database.session import get_db
 from app.models.document import Document
 from app.models.subject import Subject
 from app.models.user import User
+from app.models.quiz import Quiz
 from app.schemas.document import DocumentResponse
 from app.api.deps import get_current_user
 from app.services.document_service import process_document_background
@@ -24,6 +25,15 @@ router = APIRouter()
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def _detach_document_quizzes(db: Session, document_id: str) -> None:
+    """Keep saved quizzes when their source document is removed."""
+    db.query(Quiz).filter(Quiz.document_id == document_id).update(
+        {Quiz.document_id: None},
+        synchronize_session=False,
+    )
+
 
 @router.get("/", response_model=List[DocumentResponse])
 def get_documents(subject_id: str | None = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -156,7 +166,11 @@ def delete_document(document_id: str, db: Session = Depends(get_db), current_use
             status_code=502,
             detail="Could not delete the uploaded file from storage.",
         ) from exc
-        
+
+    # Keep saved quizzes useful after their source document is removed, and
+    # release the foreign key before deleting the document row.
+    _detach_document_quizzes(db, document.id)
+
     db.delete(document)
     db.commit()
     return {"message": "Document deleted successfully"}
