@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
+import type { QuizResponse, QuizResultResponse, SubjectResponse } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { CheckSquare } from "lucide-react";
 
 export default function QuizPage() {
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [loading, setLoading] = useState(false);
-  const [quiz, setQuiz] = useState<any>(null);
+  const [quiz, setQuiz] = useState<QuizResponse | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<QuizResultResponse | null>(null);
   const [generationError, setGenerationError] = useState("");
 
   const [formData, setFormData] = useState({
@@ -22,7 +22,7 @@ export default function QuizPage() {
   useEffect(() => {
     const loadSubjects = async () => {
       try {
-        const data = await fetchApi("/api/subjects");
+        const data = await fetchApi<SubjectResponse[]>("/api/subjects");
         setSubjects(data);
         if (data.length > 0) {
           setFormData(prev => ({ ...prev, subject_id: data[0].id }));
@@ -41,7 +41,7 @@ export default function QuizPage() {
     setLoading(true);
     setGenerationError("");
     try {
-      const generated = await fetchApi("/api/quizzes/generate", {
+      const generated = await fetchApi<QuizResponse>("/api/quizzes/generate", {
         method: "POST",
         body: JSON.stringify(formData),
       });
@@ -57,7 +57,10 @@ export default function QuizPage() {
   };
 
   const handleSubmit = async () => {
-    if (Object.keys(answers).length < quiz.questions.length) {
+    const currentQuiz = quiz;
+    if (!currentQuiz) return;
+
+    if (Object.keys(answers).length < currentQuiz.questions.length) {
       if (!confirm("You haven't answered all questions. Submit anyway?")) return;
     }
 
@@ -70,7 +73,7 @@ export default function QuizPage() {
     };
 
     try {
-      const res = await fetchApi(`/api/quizzes/${quiz.id}/submit`, {
+      const res = await fetchApi<QuizResultResponse>(`/api/quizzes/${currentQuiz.id}/submit`, {
         method: "POST",
         body: JSON.stringify(submission),
       });
@@ -153,8 +156,8 @@ export default function QuizPage() {
           </div>
 
           <div className="space-y-8">
-            {quiz.questions.map((q: any, i: number) => {
-              const explanation = result?.explanations.find((e: any) => e.question_id === q.id);
+            {quiz.questions.map((q, i) => {
+              const explanation = result?.explanations.find((item) => item.question_id === q.id);
               
               return (
                 <div key={q.id} className="space-y-3">
@@ -183,7 +186,7 @@ export default function QuizPage() {
                         <button
                           key={optIdx}
                           disabled={!!result}
-                          onClick={() => setAnswers({...answers, [q.id]: optIdx})}
+                          onClick={() => setAnswers((previous) => ({ ...previous, [q.id]: optIdx }))}
                           className={btnClass}
                         >
                           {opt}

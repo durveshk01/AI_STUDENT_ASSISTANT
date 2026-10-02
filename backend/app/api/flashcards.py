@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 
 from app.database.session import get_db
 from app.models.flashcard import FlashcardDeck, Flashcard
+from app.models.document import Document
+from app.models.subject import Subject
 from app.models.user import User
 from app.schemas.flashcard import FlashcardGenerateRequest, FlashcardDeckResponse, ReviewRequest, GeneratedDeck
 from app.api.deps import get_current_user
@@ -15,9 +17,28 @@ router = APIRouter()
 
 @router.post("/generate", response_model=FlashcardDeckResponse)
 def generate_flashcards(request: FlashcardGenerateRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    from app.models.subject import Subject
-    subject = db.query(Subject).filter(Subject.id == request.subject_id).first()
-    search_query = subject.name if subject else "key concepts and definitions"
+    subject = db.query(Subject).filter(
+        Subject.id == request.subject_id,
+        Subject.user_id == current_user.id,
+    ).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    if request.document_id:
+        document = db.query(Document).filter(
+            Document.id == request.document_id,
+            Document.subject_id == subject.id,
+            Document.user_id == current_user.id,
+        ).first()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found in this subject")
+        if document.status != "completed":
+            raise HTTPException(
+                status_code=409,
+                detail=f"This document is {document.status}. Wait for processing to finish before generating flashcards.",
+            )
+
+    search_query = subject.name
     chunks = semantic_search(db, current_user.id, search_query, request.subject_id, request.document_id, top_k=10)
     
     if not chunks:
@@ -32,6 +53,9 @@ def generate_flashcards(request: FlashcardGenerateRequest, db: Session = Depends
         generated: GeneratedDeck = ai_provider.generate_structured(prompt, context_str, GeneratedDeck)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate flashcards: {e}")
+
+    if not generated.cards:
+        raise HTTPException(status_code=502, detail="The AI returned no flashcards. Please try generating the deck again.")
 
     deck = FlashcardDeck(
         title=f"Flashcards generated on {datetime.now().strftime('%Y-%m-%d')}",

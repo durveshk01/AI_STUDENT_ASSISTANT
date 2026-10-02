@@ -1,11 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from typing import List, Optional
 
 class FlashcardGenerateRequest(BaseModel):
     subject_id: str
     document_id: Optional[str] = None
-    num_cards: int = 10
+    num_cards: int = Field(default=10, ge=5, le=30)
 
 class GeneratedCard(BaseModel):
     front: str
@@ -21,17 +21,15 @@ class FlashcardResponse(BaseModel):
     box: int
     next_review: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class FlashcardDeckResponse(BaseModel):
     id: str
     title: str
     created_at: datetime
-    cards: List[FlashcardResponse] = []
+    cards: List[FlashcardResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ReviewRequest(BaseModel):
-    quality: int # 0-5
+    quality: int = Field(ge=0, le=5)

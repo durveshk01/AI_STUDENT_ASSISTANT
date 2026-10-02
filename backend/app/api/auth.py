@@ -58,7 +58,7 @@ def login(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = 
     OAuth2 compatible token login, get an access token for future requests
     """
     user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if len(form_data.password.encode("utf-8")) > 72 or not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     
     return {

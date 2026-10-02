@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
+import type { DocumentResponse, SubjectResponse } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { Book, Plus, Trash2, Upload, FileText, Sparkles } from "lucide-react";
+import { Book, Plus, Trash2, Upload, Sparkles } from "lucide-react";
 
 export default function SubjectsPage() {
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newSubject, setNewSubject] = useState({ name: "", description: "" });
@@ -15,7 +16,7 @@ export default function SubjectsPage() {
 
   const loadSubjects = async () => {
     try {
-      const data = await fetchApi("/api/subjects");
+      const data = await fetchApi<SubjectResponse[]>("/api/subjects");
       setSubjects(data);
     } catch (err) {
       console.error(err);
@@ -25,7 +26,23 @@ export default function SubjectsPage() {
   };
 
   useEffect(() => {
-    loadSubjects();
+    let active = true;
+
+    const loadInitialSubjects = async () => {
+      try {
+        const data = await fetchApi<SubjectResponse[]>("/api/subjects");
+        if (active) setSubjects(data);
+      } catch (err) {
+        if (active) console.error(err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void loadInitialSubjects();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -67,23 +84,15 @@ export default function SubjectsPage() {
     formData.append("subject_id", subjectId); // Added missing form field
 
     try {
-      const token = localStorage.getItem("token");
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${API_URL}/api/documents/upload`, {
+      await fetchApi<DocumentResponse>("/api/documents/upload", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      
-      if (!response.ok) {
-        throw new Error("Upload failed on server");
-      }
-      
       alert(`Syllabus "${file.name}" uploaded! The AI is now processing it in the background.`);
-      loadSubjects();
+      await loadSubjects();
     } catch (err) {
       console.error(err);
-      alert("Upload failed. Please check the file and try again.");
+      alert(err instanceof Error ? err.message : "Upload failed. Please check the file and try again.");
     } finally {
       setSyllabusUploading(null);
     }
@@ -174,12 +183,6 @@ export default function SubjectsPage() {
                   <h3 className="font-bold text-lg text-gray-900 group-hover:text-blue-600 transition-colors mb-1">{subject.name}</h3>
                   <p className="text-gray-500 text-sm line-clamp-2">{subject.description || "No description"}</p>
                   
-                  {subject.documents && subject.documents.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200/50 flex items-center gap-1 text-xs text-gray-400">
-                      <FileText className="w-3 h-3" />
-                      {subject.documents.length} document{subject.documents.length > 1 ? "s" : ""}
-                    </div>
-                  )}
                 </Link>
                 
                 {/* Syllabus Upload Button */}

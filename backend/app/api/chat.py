@@ -7,6 +7,8 @@ import json
 from app.database.session import get_db, SessionLocal
 from app.models.chat import Conversation, Message
 from app.models.user import User
+from app.models.subject import Subject
+from app.models.document import Document
 from app.schemas.chat import ChatRequest, ConversationResponse, MessageResponse
 from app.api.deps import get_current_user
 from app.rag.search import semantic_search
@@ -45,6 +47,24 @@ def chat(request: ChatRequest, db: Session = Depends(get_db), current_user: User
     Handles a chat query. If conversation_id is provided, appends to it.
     Uses RAG to find context and generates streaming response.
     """
+    subject_id = request.subject_id
+    if subject_id:
+        subject = db.query(Subject).filter(
+            Subject.id == subject_id,
+            Subject.user_id == current_user.id,
+        ).first()
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
+
+    if request.document_id:
+        document = db.query(Document).filter(
+            Document.id == request.document_id,
+            Document.user_id == current_user.id,
+        ).first()
+        if not document or (subject_id and document.subject_id != subject_id):
+            raise HTTPException(status_code=404, detail="Document not found in this subject")
+        subject_id = subject_id or document.subject_id
+
     conversation = None
     if request.conversation_id:
         conversation = db.query(Conversation).filter(Conversation.id == request.conversation_id, Conversation.user_id == current_user.id).first()
@@ -57,7 +77,7 @@ def chat(request: ChatRequest, db: Session = Depends(get_db), current_user: User
         conversation = Conversation(
             title=title,
             user_id=current_user.id,
-            subject_id=request.subject_id
+            subject_id=subject_id
         )
         db.add(conversation)
         db.commit()
@@ -77,7 +97,7 @@ def chat(request: ChatRequest, db: Session = Depends(get_db), current_user: User
         db=db,
         user_id=current_user.id,
         query=request.query,
-        subject_id=request.subject_id,
+        subject_id=subject_id,
         document_id=request.document_id,
         top_k=4
     )

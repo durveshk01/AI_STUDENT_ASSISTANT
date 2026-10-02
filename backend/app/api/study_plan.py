@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
-from pydantic import BaseModel
+from typing import List, Literal
+from datetime import date
+from pydantic import BaseModel, Field
 
 from app.database.session import get_db
 from app.models.user import User
@@ -11,11 +12,11 @@ from app.ai.factory import get_ai_provider
 router = APIRouter()
 
 class StudyPlanRequest(BaseModel):
-    exam_date: str
-    subjects: List[str]
-    available_hours_per_day: float
-    current_confidence: str
-    target_score: str
+    exam_date: date
+    subjects: List[str] = Field(min_length=1, max_length=25)
+    available_hours_per_day: float = Field(gt=0, le=24)
+    current_confidence: Literal["Low", "Medium", "High"]
+    target_score: str = Field(min_length=1, max_length=40)
 
 class StudyTask(BaseModel):
     subject: str

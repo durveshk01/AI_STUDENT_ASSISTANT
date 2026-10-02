@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
+import type { StudyPlanResponse, SubjectResponse } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Calendar, Target, Clock, CheckCircle } from "lucide-react";
 
 export default function PlannerPage() {
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [loading, setLoading] = useState(false);
-  const [plan, setPlan] = useState<any>(null);
+  const [plan, setPlan] = useState<StudyPlanResponse["plan"] | null>(null);
   
   const [formData, setFormData] = useState({
     exam_date: "",
@@ -21,7 +22,7 @@ export default function PlannerPage() {
   useEffect(() => {
     const loadSubjects = async () => {
       try {
-        const data = await fetchApi("/api/subjects");
+        const data = await fetchApi<SubjectResponse[]>("/api/subjects");
         setSubjects(data);
       } catch (err) {
         console.error(err);
@@ -41,7 +42,7 @@ export default function PlannerPage() {
     });
 
     try {
-      const result = await fetchApi("/api/study-plan/generate", {
+      const result = await fetchApi<StudyPlanResponse>("/api/study-plan/generate", {
         method: "POST",
         body: JSON.stringify({
           ...formData,
@@ -170,11 +171,11 @@ export default function PlannerPage() {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
               <h2 className="text-xl font-bold border-b pb-2">Your Personalized Schedule</h2>
               <div className="space-y-4">
-                {plan.schedule.map((day: any, i: number) => (
+                {plan.schedule.map((day, i) => (
                   <div key={i} className="border rounded-lg p-4 bg-gray-50">
                     <h3 className="font-bold text-lg text-blue-700 mb-3">{day.day}</h3>
                     <div className="space-y-2">
-                      {day.tasks.map((task: any, j: number) => (
+                      {day.tasks.map((task, j) => (
                         <div key={j} className="flex items-start gap-3 bg-white p-3 rounded shadow-sm">
                           <CheckCircle className="w-5 h-5 text-gray-300 shrink-0 mt-0.5" />
                           <div>

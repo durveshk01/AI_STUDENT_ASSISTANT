@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { fetchApi } from "@/lib/api";
+import type { DocumentResponse, SubjectResponse } from "@/lib/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FileText, ArrowLeft, Upload, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -12,18 +13,18 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
   const subjectId = resolvedParams.id;
   const router = useRouter();
   
-  const [subject, setSubject] = useState<any>(null);
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [subject, setSubject] = useState<SubjectResponse | null>(null);
+  const [documents, setDocuments] = useState<DocumentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
-      const subjectData = await fetchApi(`/api/subjects/${subjectId}`);
+      const subjectData = await fetchApi<SubjectResponse>(`/api/subjects/${subjectId}`);
       setSubject(subjectData);
       
-      const docsData = await fetchApi(`/api/documents?subject_id=${subjectId}`);
+      const docsData = await fetchApi<DocumentResponse[]>(`/api/documents?subject_id=${subjectId}`);
       setDocuments(docsData);
     } catch (err) {
       console.error(err);
@@ -34,14 +35,35 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
   };
 
   useEffect(() => {
-    loadData();
-  }, [subjectId]);
+    let active = true;
+
+    const loadInitialData = async () => {
+      try {
+        const subjectData = await fetchApi<SubjectResponse>(`/api/subjects/${subjectId}`);
+        const docsData = await fetchApi<DocumentResponse[]>(`/api/documents?subject_id=${subjectId}`);
+        if (!active) return;
+        setSubject(subjectData);
+        setDocuments(docsData);
+      } catch (err) {
+        if (!active) return;
+        console.error(err);
+        router.push("/subjects");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void loadInitialData();
+    return () => {
+      active = false;
+    };
+  }, [router, subjectId]);
 
   useEffect(() => {
     if (!documents.some((doc) => doc.status === "uploading" || doc.status === "processing")) return;
     const interval = setInterval(async () => {
       try {
-        const docsData = await fetchApi(`/api/documents?subject_id=${subjectId}`);
+        const docsData = await fetchApi<DocumentResponse[]>(`/api/documents?subject_id=${subjectId}`);
         setDocuments(docsData);
       } catch (err) {
         console.error(err);
@@ -51,7 +73,8 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
   }, [documents, subjectId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
 
     setUploading(true);
@@ -60,26 +83,17 @@ export default function SubjectDetailPage({ params }: { params: Promise<{ id: st
     formData.append("subject_id", subjectId);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(`${API_URL}/api/documents/upload`, {
+      await fetchApi<DocumentResponse>("/api/documents/upload", {
         method: "POST",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: formData,
       });
-
-      if (!response.ok) throw new Error("Upload failed");
-      
-      loadData();
+      await loadData();
     } catch (err) {
       console.error("Upload error:", err);
-      alert("Failed to upload document");
+      alert(err instanceof Error ? err.message : "Failed to upload document");
     } finally {
       setUploading(false);
-      if (e.target) e.target.value = '';
+      input.value = "";
     }
   };
 

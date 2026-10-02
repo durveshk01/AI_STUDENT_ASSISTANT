@@ -1,12 +1,12 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 class QuizGenerateRequest(BaseModel):
     subject_id: str
     document_id: Optional[str] = None
     num_questions: int = Field(default=10, ge=1, le=20)
-    difficulty: str = "Medium"
+    difficulty: Literal["Easy", "Medium", "Hard"] = "Medium"
 
 # AI Schema
 class GeneratedQuestion(BaseModel):
@@ -26,8 +26,7 @@ class QuizQuestionResponse(BaseModel):
     options: List[str] # parsed from JSON
     # correct_answer_index and explanation intentionally omitted so client can't cheat
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class QuizResponse(BaseModel):
     id: str
@@ -35,10 +34,9 @@ class QuizResponse(BaseModel):
     difficulty: str
     num_questions: int
     created_at: datetime
-    questions: List[QuizQuestionResponse] = []
+    questions: List[QuizQuestionResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class SubmitAnswer(BaseModel):
     question_id: str
@@ -47,8 +45,13 @@ class SubmitAnswer(BaseModel):
 class QuizSubmitRequest(BaseModel):
     answers: List[SubmitAnswer]
 
+class QuizExplanationResponse(BaseModel):
+    question_id: str
+    correct_index: int
+    explanation: str
+
 class QuizResultResponse(BaseModel):
     score: int
     total_questions: int
     percentage: float
-    explanations: List[dict] # {question_id, correct_index, explanation}
+    explanations: List[QuizExplanationResponse]

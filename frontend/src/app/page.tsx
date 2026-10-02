@@ -298,13 +298,13 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-8 mt-16 text-left">
             <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
               <Shield className="w-8 h-8 text-blue-400 mb-4" />
-              <h3 className="text-lg font-bold mb-2">Your Data Stays Yours</h3>
-              <p className="text-gray-400 text-sm">Documents are processed and stored securely in your own PostgreSQL database. Nothing is sent to third parties.</p>
+              <h3 className="text-lg font-bold mb-2">AI Grounded in Your Notes</h3>
+              <p className="text-gray-400 text-sm">Your documents are stored in your study workspace. Relevant text may be sent to Google Gemini to answer questions and create study materials.</p>
             </div>
             <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
               <Zap className="w-8 h-8 text-yellow-400 mb-4" />
               <h3 className="text-lg font-bold mb-2">RAG Architecture</h3>
-              <p className="text-gray-400 text-sm">Uses Retrieval-Augmented Generation with pgvector embeddings. The AI searches your actual notes before answering — no hallucinations.</p>
+              <p className="text-gray-400 text-sm">Retrieval-Augmented Generation searches your notes before answering and shows source citations when available.</p>
             </div>
             <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
               <Clock className="w-8 h-8 text-green-400 mb-4" />
@@ -325,7 +325,6 @@ export default function Home() {
               Create Free Account
             </Link>
           </div>
-          <p className="mt-6 text-sm text-blue-200">Demo credentials: demo@example.com / password123</p>
         </div>
       </section>
 

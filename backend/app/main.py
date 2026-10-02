@@ -1,3 +1,6 @@
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.auth import router as auth_router
@@ -6,16 +9,24 @@ from app.database.session import engine
 from app.core.config import settings
 from sqlalchemy import text
 
-# Create vector extension and all tables
-with engine.connect() as conn:
-    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    conn.commit()
-Base.metadata.create_all(bind=engine)
+def initialize_database() -> None:
+    """Prepare the required PostgreSQL extension and tables before serving requests."""
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
+    Base.metadata.create_all(bind=engine)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    initialize_database()
+    yield
 
 app = FastAPI(
     title="AI-Powered Study Assistant API",
     description="API for the AI-Powered Study Assistant",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS configuration

@@ -3,17 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
+import type { ConversationResponse } from "@/lib/types";
 import { MessageSquare, Plus } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 export default function ChatIndexPage() {
-  const [conversations, setConversations] = useState<any[]>([]);
+  const [conversations, setConversations] = useState<ConversationResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadConversations = async () => {
       try {
-        const data = await fetchApi("/api/chat/conversations");
+        const data = await fetchApi<ConversationResponse[]>("/api/chat/conversations");
         setConversations(data);
       } catch (err) {
         console.error(err);

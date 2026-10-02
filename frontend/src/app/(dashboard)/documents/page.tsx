@@ -3,17 +3,18 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
+import type { DocumentResponse } from "@/lib/types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FileText, Trash2, ExternalLink } from "lucide-react";
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<DocumentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const loadDocuments = async () => {
     try {
-      const data = await fetchApi("/api/documents");
+      const data = await fetchApi<DocumentResponse[]>("/api/documents");
       setDocuments(data);
     } catch (err) {
       console.error(err);
@@ -23,14 +24,30 @@ export default function DocumentsPage() {
   };
 
   useEffect(() => {
-    loadDocuments();
+    let active = true;
+
+    const loadInitialDocuments = async () => {
+      try {
+        const data = await fetchApi<DocumentResponse[]>("/api/documents");
+        if (active) setDocuments(data);
+      } catch (err) {
+        if (active) console.error(err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    void loadInitialDocuments();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
     if (!documents.some((doc) => doc.status === "uploading" || doc.status === "processing")) return;
     const interval = setInterval(async () => {
       try {
-        setDocuments(await fetchApi("/api/documents"));
+        setDocuments(await fetchApi<DocumentResponse[]>("/api/documents"));
       } catch (err) {
         console.error(err);
       }
@@ -69,7 +86,7 @@ export default function DocumentsPage() {
         <Link href="/subjects" className={buttonVariants({ variant: "outline" })}>Upload via Subjects</Link>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
         {documents.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -77,7 +94,7 @@ export default function DocumentsPage() {
             <p className="text-gray-500 mt-1">Upload study materials in your subjects to see them here.</p>
           </div>
         ) : (
-          <table className="w-full text-left">
+          <table className="w-full min-w-[640px] text-left">
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>

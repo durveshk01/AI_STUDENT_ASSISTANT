@@ -3,20 +3,21 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { Book, FileText, LayoutDashboard, BrainCircuit, BarChart, Settings, LogOut, CheckSquare, MessageSquare, Target } from "lucide-react";
+import { Book, FileText, LayoutDashboard, BrainCircuit, BarChart, LogOut, CheckSquare, MessageSquare, Target } from "lucide-react";
 import { fetchApi } from "@/lib/api";
+import type { UserResponse } from "@/lib/types";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<UserResponse | null>(null);
 
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const userData = await fetchApi("/api/auth/me");
+        const userData = await fetchApi<UserResponse>("/api/auth/me");
         setUser(userData);
-      } catch (err) {
+      } catch {
         router.push("/login");
       }
     };

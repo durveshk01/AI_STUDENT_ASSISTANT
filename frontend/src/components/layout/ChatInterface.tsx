@@ -2,13 +2,20 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { fetchApi } from "@/lib/api";
+import { fetchApi, getApiHeaders, getApiUrl } from "@/lib/api";
+import type { ChatMessage, ChatSource, ConversationResponse } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Send, User as UserIcon, Bot, FileText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
+interface ChatStreamEvent {
+  content?: string;
+  sources?: ChatSource[];
+  conversation_id?: string;
+}
+
 export default function ChatInterface({ conversationId, initialSubjectId, initialDocumentId }: { conversationId?: string, initialSubjectId?: string, initialDocumentId?: string }) {
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -16,14 +23,14 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
   
   // Real app: fetch subjects/documents to populate dropdowns
   const [selectedSubject, setSelectedSubject] = useState(initialSubjectId || "");
-  const [selectedDocument, setSelectedDocument] = useState(initialDocumentId || "");
+  const selectedDocument = initialDocumentId || "";
 
   useEffect(() => {
     if (conversationId) {
       // Load existing conversation
       const loadConv = async () => {
         try {
-          const conv = await fetchApi(`/api/chat/conversations/${conversationId}`);
+          const conv = await fetchApi<ConversationResponse>(`/api/chat/conversations/${conversationId}`);
           setMessages(conv.messages || []);
           if (conv.subject_id) setSelectedSubject(conv.subject_id);
         } catch (err) {
@@ -42,21 +49,15 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
     e.preventDefault();
     if (!input.trim() || loading) return;
 
-    const userMessage = { role: "user", content: input };
+    const userMessage: ChatMessage = { role: "user", content: input };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(`${API_URL}/api/chat`, {
+      const response = await fetch(getApiUrl("/api/chat/"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: getApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           conversation_id: conversationId,
           subject_id: selectedSubject || undefined,
@@ -65,7 +66,16 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to send message");
+      if (!response.ok) {
+        let message = `Failed to send message (HTTP ${response.status}).`;
+        try {
+          const payload = (await response.json()) as { detail?: unknown };
+          if (typeof payload.detail === "string") message = payload.detail;
+        } catch {
+          // Keep the status-based message if the error response is not JSON.
+        }
+        throw new Error(message);
+      }
       
       if (!response.body) throw new Error("No response body from server");
       const reader = response.body.getReader();
@@ -85,39 +95,43 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
         const parts = buffer.split("\n\n");
         buffer = parts.pop() || ""; // Keep the incomplete part in the buffer
 
+        let streamFinished = false;
         for (const line of parts) {
           if (line.startsWith("data: ")) {
             const dataStr = line.slice(6);
             if (dataStr.trim() === "[DONE]") {
-              // We're done
+              streamFinished = true;
               break;
             }
             
             try {
-              const data = JSON.parse(dataStr);
-              if (data.content) {
+              const data = JSON.parse(dataStr) as ChatStreamEvent;
+              if (typeof data.content === "string") {
                 aiContent += data.content;
                 setMessages((prev) => {
                   const newMsgs = [...prev];
-                  newMsgs[newMsgs.length - 1].content = aiContent;
+                  const lastIndex = newMsgs.length - 1;
+                  newMsgs[lastIndex] = { ...newMsgs[lastIndex], content: aiContent };
                   return newMsgs;
                 });
               }
               if (data.sources) {
                 setMessages((prev) => {
                   const newMsgs = [...prev];
-                  newMsgs[newMsgs.length - 1].sources = data.sources;
+                  const lastIndex = newMsgs.length - 1;
+                  newMsgs[lastIndex] = { ...newMsgs[lastIndex], sources: data.sources };
                   return newMsgs;
                 });
               }
               if (data.conversation_id && !conversationId) {
                 newConvId = data.conversation_id;
               }
-            } catch (e) {
+            } catch {
               console.error("Failed to parse JSON chunk:", dataStr);
             }
           }
         }
+        if (streamFinished) break;
       }
       
       if (!conversationId && newConvId) {
@@ -126,7 +140,8 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
 
     } catch (err) {
       console.error(err);
-      setMessages((prev) => [...prev, { role: "system", content: "Error communicating with AI." }]);
+      const message = err instanceof Error ? err.message : "Error communicating with AI.";
+      setMessages((prev) => [...prev, { role: "system", content: message }]);
     } finally {
       setLoading(false);
     }
@@ -164,7 +179,7 @@ export default function ChatInterface({ conversationId, initialSubjectId, initia
                   <div className="mt-4 pt-3 border-t border-gray-200">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2">Sources</p>
                     <div className="space-y-1">
-                      {msg.sources.map((s: any, idx: number) => (
+                      {msg.sources.map((s, idx) => (
                         <div key={idx} className="flex items-center gap-1 text-xs text-gray-600 bg-white/50 p-1.5 rounded">
                           <FileText className="w-3 h-3 text-blue-500" />
                           <span className="truncate max-w-[200px]">{s.document_name}</span>

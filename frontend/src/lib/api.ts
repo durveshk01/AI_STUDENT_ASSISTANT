@@ -1,11 +1,43 @@
 const DEFAULT_API_URL = "http://localhost:8000";
 const API_REQUEST_TIMEOUT_MS = 90_000;
+const API_WAKE_TIMEOUT_MS = 75_000;
 
-function getApiUrl(path: string): string {
+export function getApiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) return path;
 
   const baseUrl = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_URL).replace(/\/+$/, "");
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export function getApiHeaders(headers?: HeadersInit): Headers {
+  const result = new Headers(headers);
+
+  if (typeof window !== "undefined") {
+    const token = window.localStorage.getItem("token");
+    if (token && !result.has("Authorization")) {
+      result.set("Authorization", `Bearer ${token}`);
+    }
+  }
+
+  return result;
+}
+
+export async function warmApi(): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_WAKE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(getApiUrl("/"), {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function getErrorMessage(payload: unknown, status: number): string {
@@ -22,8 +54,8 @@ function getErrorMessage(payload: unknown, status: number): string {
   return `Request failed with status ${status}`;
 }
 
-export async function fetchApi<T = any>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers);
+export async function fetchApi<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = getApiHeaders(options.headers);
   const body = options.body;
   const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
   const isUrlEncoded = typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams;
@@ -33,13 +65,6 @@ export async function fetchApi<T = any>(path: string, options: RequestInit = {})
       "Content-Type",
       isUrlEncoded ? "application/x-www-form-urlencoded;charset=UTF-8" : "application/json",
     );
-  }
-
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem("token");
-    if (token && !headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
   }
 
   const controller = new AbortController();

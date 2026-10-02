@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import type { AnalyticsResponse } from "@/lib/types";
 import { BarChart, Book, FileText, CheckSquare, Target } from "lucide-react";
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadAnalytics = async () => {
       try {
-        const result = await fetchApi("/api/analytics");
+        const result = await fetchApi<AnalyticsResponse>("/api/analytics");
         setData(result);
       } catch (err) {
         console.error(err);

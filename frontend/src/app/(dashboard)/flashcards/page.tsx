@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/api";
+import type { FlashcardDeckResponse, SubjectResponse } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { BrainCircuit, Play, ChevronRight, ChevronLeft } from "lucide-react";
+import { BrainCircuit, ChevronLeft } from "lucide-react";
 
 export default function FlashcardsPage() {
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<SubjectResponse[]>([]);
   const [loading, setLoading] = useState(false);
-  const [deck, setDeck] = useState<any>(null);
+  const [deck, setDeck] = useState<FlashcardDeckResponse | null>(null);
   
   // Study session state
   const [studying, setStudying] = useState(false);
@@ -23,7 +24,7 @@ export default function FlashcardsPage() {
   useEffect(() => {
     const loadSubjects = async () => {
       try {
-        const data = await fetchApi("/api/subjects");
+        const data = await fetchApi<SubjectResponse[]>("/api/subjects");
         setSubjects(data);
         if (data.length > 0) {
           setFormData(prev => ({ ...prev, subject_id: data[0].id }));
@@ -41,10 +42,13 @@ export default function FlashcardsPage() {
     
     setLoading(true);
     try {
-      const generated = await fetchApi("/api/flashcards/generate", {
+      const generated = await fetchApi<FlashcardDeckResponse>("/api/flashcards/generate", {
         method: "POST",
         body: JSON.stringify(formData),
       });
+      if (generated.cards.length === 0) {
+        throw new Error("The AI returned no flashcards. Please try generating the deck again.");
+      }
       setDeck(generated);
       setStudying(true);
       setCurrentIndex(0);
@@ -58,13 +62,14 @@ export default function FlashcardsPage() {
   };
 
   const handleReview = async (quality: number) => {
+    if (!deck) return;
     const card = deck.cards[currentIndex];
     try {
       // In background, notify server of review quality for spaced repetition
-      fetchApi(`/api/flashcards/${card.id}/review`, {
+      await fetchApi(`/api/flashcards/${card.id}/review`, {
         method: "POST",
         body: JSON.stringify({ quality }),
-      }).catch(console.error);
+      });
 
       // Move to next card
       if (currentIndex < deck.cards.length - 1) {
@@ -83,7 +88,7 @@ export default function FlashcardsPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold">Flashcards</h1>
       
-      {!studying ? (
+      {!studying || !deck ? (
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 max-w-xl mx-auto mt-12">
           <div className="text-center mb-6">
             <BrainCircuit className="w-12 h-12 text-blue-600 mx-auto mb-2" />

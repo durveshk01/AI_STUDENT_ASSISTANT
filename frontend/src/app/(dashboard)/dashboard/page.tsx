@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import type { AnalyticsResponse, DocumentResponse, SubjectResponse, UserResponse } from "@/lib/types";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Book, FileText, CheckSquare, Clock, MessageSquare, BrainCircuit, Target, Upload, ArrowRight, Sparkles } from "lucide-react";
@@ -14,26 +15,38 @@ export default function DashboardPage() {
   });
   const [userName, setUserName] = useState("");
   const [hasError, setHasError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
     const loadData = async () => {
       try {
-        const user = await fetchApi("/api/auth/me");
+        const [user, subjects, documents, analytics] = await Promise.all([
+          fetchApi<UserResponse>("/api/auth/me"),
+          fetchApi<SubjectResponse[]>("/api/subjects"),
+          fetchApi<DocumentResponse[]>("/api/documents"),
+          fetchApi<AnalyticsResponse>("/api/analytics"),
+        ]);
+        if (!active) return;
         setUserName(user.name || "Student");
-        
-        const subjects = await fetchApi("/api/subjects");
-        const documents = await fetchApi("/api/documents");
         setStats({
           subjectsCount: subjects.length,
           documentsCount: documents.length,
-          quizzesCompleted: 0,
+          quizzesCompleted: analytics.quizzes_completed,
         });
       } catch (err) {
-        console.error(err);
-        setHasError(true);
+        if (active) {
+          console.error(err);
+          setHasError(true);
+        }
+      } finally {
+        if (active) setIsLoading(false);
       }
     };
-    loadData();
+    void loadData();
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (hasError) {
@@ -44,6 +57,10 @@ export default function DashboardPage() {
         <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md">Retry</button>
       </div>
     );
+  }
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-20">Loading dashboard...</div>;
   }
 
   const isNewUser = stats.subjectsCount === 0;
@@ -112,7 +129,7 @@ export default function DashboardPage() {
             <div className="bg-white p-6 rounded-xl border shadow-sm">
               <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold mb-4">1</div>
               <h3 className="font-bold text-lg mb-2">Create a Subject</h3>
-              <p className="text-gray-600 text-sm mb-4">Organize your materials by course. For example: "Biology 101" or "Data Structures".</p>
+              <p className="text-gray-600 text-sm mb-4">Organize your materials by course. For example: &quot;Biology 101&quot; or &quot;Data Structures&quot;.</p>
               <Link href="/subjects" className={buttonVariants({ size: "sm", className: "w-full" })}>
                 <Book className="w-4 h-4 mr-2" /> Create Subject
               </Link>
@@ -204,7 +221,7 @@ export default function DashboardPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 font-bold mt-0.5">✓</span>
-              <span>Ask specific questions — "Explain the Krebs cycle" works better than "Tell me about biology"</span>
+              <span>Ask specific questions — &quot;Explain the Krebs cycle&quot; works better than &quot;Tell me about biology&quot;</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 font-bold mt-0.5">✓</span>
