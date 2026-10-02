@@ -71,7 +71,7 @@ async def upload_document(
         file_path = f"{current_user.id}/{unique_filename}"
         try:
             await asyncio.to_thread(
-                upload_fileobj,
+               upload_fileobj,
                 file.file,
                 file_path,
                 file.content_type or "application/octet-stream",
