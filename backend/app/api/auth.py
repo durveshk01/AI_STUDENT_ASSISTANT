@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Any
+import secrets
+from sqlalchemy.exc import IntegrityError
 
 from app.database.session import get_db
 from app.models.user import User
@@ -11,6 +13,11 @@ from app.core.security import verify_password, get_password_hash, create_access_
 from app.api.deps import get_current_user
 
 router = APIRouter()
+
+# This account is shared by every visitor who chooses the public demo login.
+DEMO_USER_ID = "public-demo-user"
+DEMO_USER_EMAIL = "demo@studyassistant.example"
+DEMO_USER_NAME = "Study Assistant Demo"
 
 # Demo subjects to seed for every new user
 DEMO_SUBJECTS = [
@@ -26,6 +33,9 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> Any:
     """
     Register a new user and seed demo subjects.
     """
+    if user_in.email.lower() == DEMO_USER_EMAIL:
+        raise HTTPException(status_code=400, detail="This email is reserved for the public demo account.")
+
     user = db.query(User).filter(User.email == user_in.email).first()
     if user:
         raise HTTPException(
@@ -51,6 +61,46 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)) -> Any:
     db.commit()
 
     return user
+
+
+@router.post("/demo-login", response_model=Token)
+def demo_login(db: Session = Depends(get_db)) -> Any:
+    """Create the shared demo workspace on first use and issue a demo token."""
+    user = db.query(User).filter(User.id == DEMO_USER_ID).first()
+
+    if user is None:
+        email_collision = db.query(User).filter(User.email == DEMO_USER_EMAIL).first()
+        if email_collision:
+            raise HTTPException(status_code=503, detail="The demo account is unavailable. Please try again later.")
+
+        user = User(
+            id=DEMO_USER_ID,
+            email=DEMO_USER_EMAIL,
+            name=DEMO_USER_NAME,
+            hashed_password=get_password_hash(secrets.token_urlsafe(48)),
+        )
+        db.add(user)
+        try:
+            db.flush()
+        except IntegrityError:
+            # Another first-time demo request may have created the row concurrently.
+            db.rollback()
+            user = db.query(User).filter(User.id == DEMO_USER_ID).first()
+            if user is None:
+                raise HTTPException(status_code=503, detail="The demo account is unavailable. Please try again later.")
+
+    if user.email != DEMO_USER_EMAIL:
+        raise HTTPException(status_code=503, detail="The demo account is unavailable. Please try again later.")
+
+    if not db.query(Subject).filter(Subject.user_id == user.id).first():
+        for subj in DEMO_SUBJECTS:
+            db.add(Subject(name=subj["name"], description=subj["description"], user_id=user.id))
+
+    db.commit()
+    return {
+        "access_token": create_access_token(user.id),
+        "token_type": "bearer",
+    }
 
 @router.post("/login", response_model=Token)
 def login(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()) -> Any:

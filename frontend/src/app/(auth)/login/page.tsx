@@ -52,6 +52,22 @@ export default function LoginPage() {
     await doLogin(email, password);
   };
 
+  const handleDemoLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const data = await fetchApi<{ access_token: string }>("/api/auth/demo-login", {
+        method: "POST",
+      });
+      window.localStorage.setItem("token", data.access_token);
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to open the demo. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-md">
@@ -101,6 +117,15 @@ export default function LoginPage() {
             {loading ? "Connecting..." : "Login"}
           </Button>
         </form>
+
+        <div className="space-y-2">
+          <Button type="button" variant="outline" className="w-full" disabled={loading} onClick={handleDemoLogin}>
+            {loading ? "Connecting..." : "Continue with Demo"}
+          </Button>
+          <p className="text-xs leading-relaxed text-center text-gray-500">
+            The demo workspace is shared with other visitors. Please don&apos;t upload private files.
+          </p>
+        </div>
 
         <div className="text-sm text-center">
           Don&apos;t have an account? <Link href="/register" className="text-blue-600 hover:underline">Register</Link>
